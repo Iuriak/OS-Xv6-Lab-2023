@@ -324,6 +324,8 @@ int fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
+  // 复制父进程的跟踪掩码到子进程
+  np->tracemask = p->tracemask;
   release(&np->lock);
 
   return pid;
@@ -677,4 +679,24 @@ void procdump(void)
     printf("%d %s %s", p->pid, state, p->name);
     printf("\n");
   }
+}
+
+void
+trace(int mask)
+{
+  myproc()->tracemask=mask; 
+
+}
+
+uint64
+nproc()
+{
+  struct proc *p;
+  int freeproc=0;
+  for(p=proc;p<&proc[NPROC];p++){
+    if(p->state!=UNUSED){
+      freeproc++;
+    }
+  }
+  return freeproc;
 }
