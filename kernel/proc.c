@@ -120,14 +120,23 @@ found:
   p->pid = allocpid();
   p->state = USED;
 
-  // Allocate a trapframe page.
+  // Allocate a trapframe page.(用于保存进程上下文的页面。)
   if((p->trapframe = (struct trapframe *)kalloc()) == 0){
     freeproc(p);
     release(&p->lock);
     return 0;
   }
 
-  // An empty user page table.
+  // Allocate a usyscall page.
+  if ((p->usyscallpage = (struct usyscall *)kalloc()) == 0) {
+    freeproc(p);
+    release(&p->lock);
+    return 0;
+  }
+
+  p->usyscallpage->pid = p->pid;
+
+  // An empty user page table.(为进程分配一个用户页表。)
   p->pagetable = proc_pagetable(p);
   if(p->pagetable == 0){
     freeproc(p);
@@ -137,6 +146,7 @@ found:
 
   // Set up new context to start executing at forkret,
   // which returns to user space.
+  // 设置了新进程的上下文，以便在进程切换时返回到用户空间。
   memset(&p->context, 0, sizeof(p->context));
   p->context.ra = (uint64)forkret;
   p->context.sp = p->kstack + PGSIZE;
@@ -153,6 +163,11 @@ freeproc(struct proc *p)
   if(p->trapframe)
     kfree((void*)p->trapframe);
   p->trapframe = 0;
+
+  if(p->usyscallpage)
+    kfree((void *)p->usyscallpage);
+  p->usyscallpage = 0;
+
   if(p->pagetable)
     proc_freepagetable(p->pagetable, p->sz);
   p->pagetable = 0;
@@ -177,6 +192,12 @@ proc_pagetable(struct proc *p)
   pagetable = uvmcreate();
   if(pagetable == 0)
     return 0;
+
+  if(mappages(pagetable, USYSCALL, PGSIZE, 
+              (uint64)(p->usyscallpage), PTE_R | PTE_U) < 0) {
+    uvmfree(pagetable, 0);
+    return 0;
+  }
 
   // map the trampoline code (for system call return)
   // at the highest user virtual address.
@@ -206,6 +227,7 @@ proc_freepagetable(pagetable_t pagetable, uint64 sz)
 {
   uvmunmap(pagetable, TRAMPOLINE, 1, 0);
   uvmunmap(pagetable, TRAPFRAME, 1, 0);
+  uvmunmap(pagetable, USYSCALL, 1, 0);
   uvmfree(pagetable, sz);
 }
 
