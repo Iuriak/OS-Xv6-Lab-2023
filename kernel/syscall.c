@@ -129,32 +129,9 @@ static uint64 (*syscalls[])(void) = {
     [SYS_sysinfo] sys_sysinfo,
 };
 
-static const char *const syscallname[] = {
-    [SYS_fork] "fork",
-    [SYS_exit] "exit",
-    [SYS_wait] "wait",
-    [SYS_pipe] "pipe",
-    [SYS_read] "read",
-    [SYS_kill] "kill",
-    [SYS_exec] "exec",
-    [SYS_fstat] "fstat",
-    [SYS_chdir] "chdir",
-    [SYS_dup] "dup",
-    [SYS_getpid] "getpid",
-    [SYS_sbrk] "sbrk",
-    [SYS_sleep] "sleep",
-    [SYS_uptime] "uptime",
-    [SYS_open] "open",
-    [SYS_write] "write",
-    [SYS_mknod] "mknod",
-    [SYS_unlink] "unlink",
-    [SYS_link] "link",
-    [SYS_mkdir] "mkdir",
-    [SYS_close] "close",
-    [SYS_trace] "trace",
-    [SYS_sysinfo] "sysinfo",
-};
-
+static const char *SYSCALLNAME[] = {"", "fork", "exit", "wait", "pipe", "read", "kill",
+                                    "exec", "fstat", "chdir", "dup", "getpid", "sbrk", "sleep",
+                                    "uptime", "open", "write", "mknod", "unlink", "link", "mkdir", "close", "trace"};
 void syscall(void)
 {
   int num;
@@ -164,17 +141,17 @@ void syscall(void)
   if (num > 0 && num < NELEM(syscalls) && syscalls[num])
   {
     p->trapframe->a0 = syscalls[num]();
-
-    // 打印跟踪输出
-    if ((1 << num) & p->tracemask)
-    {
-      printf("%d: syscall %s -> %d\n", p->pid, syscallname[num], p->trapframe->a0);
-    }
   }
   else
   {
     printf("%d %s: unknown sys call %d\n",
            p->pid, p->name, num);
     p->trapframe->a0 = -1;
+  }
+
+  // 打印跟踪输出
+  if (((p->tracemask >> num) & 0x1) == 1)
+  {
+    printf("%d: syscall %s -> %d\n", p->pid, SYSCALLNAME[num], p->trapframe->a0);
   }
 }

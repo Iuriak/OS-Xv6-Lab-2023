@@ -103,12 +103,12 @@ sys_trace(void)
   int mask;
 
   // 从用户处读取跟踪掩码
-  if(argint(0, &mask) < 0){
+  if(argint(0, &mask) < 0)
     return -1;
-  }
   
   // 使用提供的掩码调用跟踪函数
-  trace(mask);
+  struct proc *p = myproc();
+  p->tracemask = mask;
   
   // Return success
   return 0;
@@ -121,8 +121,14 @@ sys_sysinfo(void)
   if(argaddr(0, &addr)<0){
     return -1;
   }
+
   struct sysinfo info;
-  info.freemem=freemem();
-  info.nproc=nproc();
-  return copyout(myproc()->pagetable,addr,(char*)&info,sizeof(info));
+  info.nproc = nproc();
+  info.freemem = freemem();
+  
+  struct proc* p = myproc();
+  if(copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0)
+    return -1;
+
+  return 0;
 }

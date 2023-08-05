@@ -298,6 +298,9 @@ int fork(void)
     release(&np->lock);
     return -1;
   }
+  // 复制父进程的跟踪掩码到子进程
+  np->tracemask = p->tracemask;
+
   np->sz = p->sz;
 
   // copy saved user registers.
@@ -324,8 +327,6 @@ int fork(void)
 
   acquire(&np->lock);
   np->state = RUNNABLE;
-  // 复制父进程的跟踪掩码到子进程
-  np->tracemask = p->tracemask;
   release(&np->lock);
 
   return pid;
@@ -681,22 +682,16 @@ void procdump(void)
   }
 }
 
-void
-trace(int mask)
+uint64 nproc(void)
 {
-  myproc()->tracemask=mask; 
-
-}
-
-uint64
-nproc()
-{
-  struct proc *p;
-  int freeproc=0;
-  for(p=proc;p<&proc[NPROC];p++){
-    if(p->state!=UNUSED){
-      freeproc++;
+  struct proc *np;
+  int num = 0;
+  for (np = proc; np < &proc[NPROC]; np++)
+  {
+    if (np->state != UNUSED)
+    {
+      num += 1;
     }
   }
-  return freeproc;
+  return num;
 }
