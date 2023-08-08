@@ -102,7 +102,33 @@ e1000_transmit(struct mbuf *m)
   // the TX descriptor ring so that the e1000 sends it. Stash
   // a pointer so that it can be freed after sending.
   //
-  
+  // 获取 ring position
+  acquire(&e1000_lock);
+
+  uint64 tdt = regs[E1000_TDT];
+  uint64 index = tdt % TX_RING_SIZE;
+  struct tx_desc send_desc = tx_ring[index];
+  if(!(send_desc.status & E1000_TXD_STAT_DD)) {
+    release(&e1000_lock);
+    return -1;
+  }
+
+  if(tx_mbufs[index] != 0){
+    // 如果该位置的缓冲区不为空则释放
+    mbuffree(tx_mbufs[index]);
+  }
+
+  tx_mbufs[index] = m;
+  tx_ring[index].addr = (uint64)tx_mbufs[index]->head;
+  tx_ring[index].length = (uint16)tx_mbufs[index]->len;
+  tx_ring[index].cmd = E1000_TXD_CMD_RS | E1000_TXD_CMD_EOP;
+  tx_ring[index].status = 0;
+
+  tdt = (tdt + 1) % TX_RING_SIZE;
+  regs[E1000_TDT] = tdt;
+  __sync_synchronize();
+
+  release(&e1000_lock);
   return 0;
 }
 
@@ -115,6 +141,37 @@ e1000_recv(void)
   // Check for packets that have arrived from the e1000
   // Create and deliver an mbuf for each packet (using net_rx()).
   //
+  // 获取接收 packet 的位置
+  uint64 rdt = regs[E1000_RDT];
+  uint64 index = (rdt + 1) % RX_RING_SIZE;
+
+  // acquire(&e1000_lock);  // 锁定以进行安全的并发访问
+
+  if(!(rx_ring[index].status & E1000_RXD_STAT_DD)){
+    // 查看新的 packet 是否有 E1000_RXD_STAT_DD 标志，如果没有，则直接返回
+    return;
+  }
+  while(rx_ring[index].status & E1000_RXD_STAT_DD){
+    // 使用 mbufput 更新长度并将其交给 net_rx() 处理
+    struct mbuf* buf = rx_mbufs[index];
+    mbufput(buf, rx_ring[index].length);
+
+    // 分配新的 mbuf 并将其写入到描述符中并将状态码设置成 0
+    rx_mbufs[index] = mbufalloc(0);
+    rx_ring[index].addr = (uint64)rx_mbufs[index]->head;
+    rx_ring[index].status = 0;
+    rdt = index;
+    regs[E1000_RDT] = rdt;
+    __sync_synchronize();
+
+    // 将数据包传递给net_rx()处理
+    net_rx(buf);
+
+    // 更新index，继续处理下一个接收到的数据包
+    index = (regs[E1000_RDT] + 1) % RX_RING_SIZE;
+  }
+
+  // release(&e1000_lock);  // 在循环结束后释放锁
 }
 
 void
