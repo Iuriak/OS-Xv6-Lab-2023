@@ -401,6 +401,54 @@ bmap(struct inode *ip, uint bn)
     return addr;
   }
 
+  bn -= NINDIRECT;
+  // 去除已经由直接块和单间接块映射的块数，以得到在双间接块中的相对块号
+
+  if (bn < NDBL_INDIRECT) {
+    // 如果文件的双间接块不存在，则分配一个
+    if ((addr = ip->addrs[NDIRECT + 1]) == 0) {
+      addr = balloc(ip->dev);
+      if (addr == 0)
+        return 0;
+      ip->addrs[NDIRECT + 1] = addr;
+    }
+
+    // 读取双间接块
+    bp = bread(ip->dev, addr);
+    a = (uint*)bp->data;
+
+    // 计算在单间接块数组中的索引，即第几个单间接块
+    uint index1 = bn / NINDIRECT;
+  
+    // 如果这个单间接块不存在，则分配一个
+    if ((addr = a[index1]) == 0) {
+      addr = balloc(ip->dev);
+      if (addr == 0)
+        return 0;
+      a[bn / NINDIRECT] = addr;
+      log_write(bp);  // Record changes in the log
+    }
+    brelse(bp);
+
+    // 读取相应的单间接块
+    bp = bread(ip->dev, addr);
+    a = (uint *)bp->data;
+
+    // 计算在单间接块中的索引，即单间接块中的第几个数据块
+    uint index2 = bn % NINDIRECT;
+
+    // 如果这个数据块不存在，则分配一个
+    if ((addr = a[index2]) == 0) {
+      addr = balloc(ip->dev);
+      if (addr == 0)
+        return 0;
+      a[bn % NINDIRECT] = addr;
+      log_write(bp);  // Record changes in the log
+    }
+    brelse(bp);
+    return addr;  // Returns the actual data block
+  }
+
   panic("bmap: out of range");
 }
 
@@ -430,6 +478,32 @@ itrunc(struct inode *ip)
     brelse(bp);
     bfree(ip->dev, ip->addrs[NDIRECT]);
     ip->addrs[NDIRECT] = 0;
+  }
+
+  if (ip->addrs[NDIRECT + 1]) {
+    // 读取双间接块
+    bp = bread(ip->dev, ip->addrs[NDIRECT + 1]);
+    a = (uint*)bp->data;
+
+    for (i = 0; i < NINDIRECT; ++i) {
+      if (a[i] == 0) continue;
+
+      // 读取单间接块
+      struct buf* bp2 = bread(ip->dev, a[i]);
+      uint* b = (uint*)bp2->data;
+      for (j = 0; j < NINDIRECT; ++j) {
+        if (b[j])
+          bfree(ip->dev, b[j]); // 释放数据块
+      }
+      brelse(bp2);
+
+      bfree(ip->dev, a[i]); // 释放单间接块
+      a[i] = 0;
+    }
+    brelse(bp);
+
+    bfree(ip->dev, ip->addrs[NDIRECT + 1]); // 释放双间接块
+    ip->addrs[NDIRECT + 1] = 0;
   }
 
   ip->size = 0;
