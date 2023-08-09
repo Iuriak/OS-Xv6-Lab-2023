@@ -5,6 +5,10 @@
 #include "spinlock.h"
 #include "proc.h"
 #include "defs.h"
+#include "sleeplock.h"  // lab 10
+#include "fs.h"         // lab 10
+#include "file.h"       // lab 10
+#include "fcntl.h"      // lab 10
 
 struct spinlock tickslock;
 uint ticks;
@@ -65,9 +69,64 @@ usertrap(void)
     intr_on();
 
     syscall();
+  } else if (r_scause() == 12 || r_scause() == 13
+             || r_scause() == 15) { // mmap page fault - lab10
+    char *pa;
+    uint64 va = PGROUNDDOWN(r_stval());
+    struct vm_area *vma = 0;
+    int flags = PTE_U;
+    int i;
+    // find the VMA
+    for (i = 0; i < NVMA; ++i) {
+      // like the Linux mmap, it can modify the remaining bytes in
+      //the end of mapped page
+      if (p->vma[i].addr && va >= p->vma[i].addr
+          && va < p->vma[i].addr + p->vma[i].len) {
+        vma = &p->vma[i];
+        break;
+      }
+    }
+    if (!vma) {
+      goto err;
+    }
+    // set write flag and dirty flag to the mapped page's PTE
+    if (r_scause() == 15 && (vma->prot & PROT_WRITE)
+        && walkaddr(p->pagetable, va)) {
+      if (uvmsetdirtywrite(p->pagetable, va)) {
+        goto err;
+      }
+    } else {
+      if ((pa = kalloc()) == 0) {
+        goto err;
+      }
+      memset(pa, 0, PGSIZE);
+      ilock(vma->f->ip);
+      if (readi(vma->f->ip, 0, (uint64) pa, va - vma->addr + vma->offset, PGSIZE) < 0) {
+        iunlock(vma->f->ip);
+        goto err;
+      }
+      iunlock(vma->f->ip);
+      if ((vma->prot & PROT_READ)) {
+        flags |= PTE_R;
+      }
+      // only store page fault and the mapped page can be written
+      //set the PTE write flag and dirty flag otherwise don't set
+      //these two flag until next store page falut
+      if (r_scause() == 15 && (vma->prot & PROT_WRITE)) {
+        flags |= PTE_W | PTE_D;
+      }
+      if ((vma->prot & PROT_EXEC)) {
+        flags |= PTE_X;
+      }
+      if (mappages(p->pagetable, va, PGSIZE, (uint64) pa, flags) != 0) {
+        kfree(pa);
+        goto err;
+      }
+    }
   } else if((which_dev = devintr()) != 0){
     // ok
   } else {
+err:
     printf("usertrap(): unexpected scause %p pid=%d\n", r_scause(), p->pid);
     printf("            sepc=%p stval=%p\n", r_sepc(), r_stval());
     p->killed = 1;
