@@ -9,6 +9,17 @@
 #define MAXOPBLOCKS  10  // max # of blocks any FS op writes
 #define LOGSIZE      (MAXOPBLOCKS*3)  // max data blocks in on-disk log
 #define NBUF         (MAXOPBLOCKS*3)  // size of disk block cache
-#define FSSIZE       1000  // size of file system in blocks
+
+//#define FSSIZE       1000  // size of file system in blocks
+#ifdef LAB_FS
+#define FSSIZE       200000  // size of file system in blocks
+#else
+#ifdef LAB_LOCK
+#define FSSIZE       10000  // size of file system in blocks
+#else
+#define FSSIZE       2000   // size of file system in blocks
+#endif
+#endif
+
 #define MAXPATH      128   // maximum file path name
-#define NBUCKET      19    // a prime number of buckets
+#define NBUCKET      13    // a prime number of buckets
