@@ -298,10 +298,12 @@ int fork(void)
     release(&np->lock);
     return -1;
   }
+  np->sz = p->sz;
+
   // 复制父进程的跟踪掩码到子进程
   np->tracemask = p->tracemask;
 
-  np->sz = p->sz;
+  // np->parent = p;
 
   // copy saved user registers.
   *(np->trapframe) = *(p->trapframe);
@@ -682,15 +684,18 @@ void procdump(void)
   }
 }
 
-uint64 nproc(void)
+// get the number of processes whose state is not UNUSED - lab2-2
+uint64 
+getnproc(void)
 {
+  uint64 num;
   struct proc *np;
-  int num = 0;
-  for (np = proc; np < &proc[NPROC]; np++)
+
+  for (num = 0, np = proc; np < &proc[NPROC]; ++np)
   {
     if (np->state != UNUSED)
     {
-      num += 1;
+      ++num;
     }
   }
   return num;

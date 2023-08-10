@@ -97,6 +97,7 @@ sys_uptime(void)
   return xticks;
 }
 
+// lab 2.1
 uint64
 sys_trace(void)
 {
@@ -107,10 +108,8 @@ sys_trace(void)
     return -1;
   
   // 使用提供的掩码调用跟踪函数
-  struct proc *p = myproc();
-  p->tracemask = mask;
+  myproc()->tracemask = mask;
   
-  // Return success
   return 0;
 }
 
@@ -123,11 +122,11 @@ sys_sysinfo(void)
   }
 
   struct sysinfo info;
-  info.nproc = nproc();
-  info.freemem = freemem();
+  info.freemem = getfreemem();
+  info.nproc = getnproc();
   
-  struct proc* p = myproc();
-  if(copyout(p->pagetable, addr, (char *)&info, sizeof(info)) < 0)
+  if(copyout(myproc()->pagetable, addr, 
+            (char *)&info, sizeof(info)) < 0)
     return -1;
 
   return 0;
