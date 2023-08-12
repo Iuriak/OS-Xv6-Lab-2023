@@ -1,0 +1,6 @@
+Q：解释为什么 copyin_new() 中需要第三个测试 srcva + len < srcva：给出前两个测试失败（即不会导致返回-1），但第三个测试为真（导致返回-1）的 srcva 和 len 值。
+answer: 三个 return -1 的条件分别为 srcva >= p->sz, srcva+len >= p->sz 和 srcva+len < srcva.
+很显然, 此处第三个条件主要是进行溢出检测, 防止无符号整数上溢. 
+由于 srcva 和 len 均为 uint64 类型的变量, 当 srcva 小于 p->sz 但是 len 为一个极大的数时, 
+如 0xffff...ffff(即对应 -1), 由于无符号整数溢出便可以满足 srcva+len < p->sz 这一条件, 但实际上复制了大量内存. 
+但通过 srcva+len < srcva 这一判断条件能够检测出溢出.
